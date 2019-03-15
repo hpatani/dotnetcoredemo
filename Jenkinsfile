@@ -1,14 +1,14 @@
 #!groovy
 def kuberemote = [:]
-kuberemote.name = 'test'
-kuberemote.host = '172.25.200.70'		
+kuberemote.name = 'test' // change the test to your names
+kuberemote.host = '172.xxx.xxx.xxx'		// give the ip of the kubernetes cluster master node
 kuberemote.allowAnyHosts = true
 		
 pipeline {
     agent any
     environment {
         IMAGE_NAME = "dotnet-core-demo" // The name you want to give your docker image. Ex. git-migrator                
-		DOCKER_HUB_REPO = "hpatani/docker-demo-hub"
+	DOCKER_HUB_REPO = "hpatani/docker-demo-hub" // the name of the Docker Hub Repository
 		
     }
     options {
@@ -21,7 +21,9 @@ pipeline {
             steps {
                 script {
                     def gitRepoUrl = scm.getUserRemoteConfigs()[0].getUrl()
-                    checkout scm: [$class: 'GitSCM', branches: scm.branches, extensions: scm.extensions, gitTool: 'Linux-Git Path', userRemoteConfigs: [[credentialsId: 'harshalgitcred', name: 'origin', url: gitRepoUrl]]]                    
+		
+                    checkout scm: [$class: 'GitSCM', branches: scm.branches, extensions: scm.extensions, gitTool: 'Linux-Git Path', userRemoteConfigs: [[credentialsId: 'gitcred', name: 'origin', url: gitRepoUrl]]]                    
+	        // change the credential ID with the your GITHUB credential ID Created in the Jenkins Portal.
                 }
             }
         }
@@ -29,8 +31,8 @@ pipeline {
         stage('Create Image') {
             agent any
             steps {
-                script {                        
-					withCredentials([usernamePassword(credentialsId: 'harshalgitcred', usernameVariable: 'docker_username', passwordVariable: 'docker_password')]) {
+                script {               //change the credential object in 
+					withCredentials([usernamePassword(credentialsId: 'dockercred', usernameVariable: 'docker_username', passwordVariable: 'docker_password')]) {
 						env.IMAGE_TAG = "latest"
 						sh "docker login -u $docker_username -p $docker_password"
 						sh "docker build -f Dockerfile . -t ${env.IMAGE_NAME}"
@@ -56,11 +58,14 @@ pipeline {
 			agent any
 			steps {
 				script {
-					withCredentials([usernamePassword(credentialsId: 'Kube-Creds', usernameVariable: 'kube_username', passwordVariable: 'kube_password')]) {
+					withCredentials([usernamePassword(credentialsId: 'dockercred', usernameVariable: 'docker_username', passwordVariable: 'docker_password'), usernamePassword(credentialsId: 'Kube-Creds', usernameVariable: 'kube_username', passwordVariable: 'kube_password')]) {
 						kuberemote.user = kube_username
-						kuberemote.password = kube_password					
+						kuberemote.password = kube_password
+						
+						sshCommand remote: kuberemote, sudo: true, command: "kubectl create secret generic regcred --from-literal=username=${docker_username} --from-literal=password=${docker_password}"	
 						sshCommand remote: kuberemote, sudo: true, command: "kubectl create -f /home/${kube_username}/deployments/deployment.yml"					
 					}
+					
 				}
 			}
 		}
